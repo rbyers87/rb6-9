@@ -65,10 +65,6 @@ import React, { useState } from 'react';
                   <div key={exercise.id} className="flex items-center justify-between py-2 border-t border-gray-100">
                     <div>
                       <p className="font-medium text-gray-900">{exercise.exercise.name}</p>
-                      <p className="text-sm text-gray-500">
-                        {exercise.sets} sets × {exercise.reps} reps
-                        {exercise.weight && ` @ ${exercise.weight}`}
-                      </p>
                     </div>
                   </div>
                 ))}
