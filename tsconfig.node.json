@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2022",  // For Node.js
+    "lib": ["ES2023", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "baseUrl": "src",
+    "paths": {
+      "@lib/*": ["lib/*"]
+    }
+  },
+  "include": ["src/**/*"]
+}
