@@ -190,80 +190,97 @@ import React, { useState, useEffect } from 'react';
         }
       };
     
-      const handleSubmit = async () => {
-        if (!user) {
-          alert('User is not logged in.');
-          return;
-        }
-    
-        try {
-          const { data: workoutLog, error: workoutError } = await supabase
-            .from('workout_logs')
-            .insert({
-              user_id: user.id,
-              workout_id: workout.id,
-              notes,
-              score: logs.reduce((total, log, index) => {
-                const exercise = workout.workout_exercises?.[index];
-                 return total + (exercise ? calculateScore(exercise, log, workout.type) : 0);
-              }, 0),
-              total: logs.reduce((total, log, index) => {
-                const exercise = workout.workout_exercises?.[index];
-                return total + (exercise ? calculateTotal(exercise, log) : 0);
-              }, 0),
-            })
-            .select()
-            .single();
-    
-          if (workoutError) throw workoutError;
-    
-          const exerciseScores = logs.flatMap((log, index) => {
-            const exercise = workout.workout_exercises?.[index];
-            if (!exercise) return [];
-    
-            return log.sets.map((set) => ({
-              user_id: user.id,
-              workout_log_id: workoutLog.id,
-              exercise_id: log.exercise_id,
-              weight: set.weight,
-              reps: set.reps,
-              distance: set.distance,
-              time: set.time,
-              calories: set.calories,
-            }));
-          });
-    
-          const { error: scoresError } = await supabase
-            .from('exercise_scores')
-            .insert(exerciseScores);
-    
-          if (scoresError) throw scoresError;
-    
-          // Fetch updated exercise scores for the current week
-          if (user) {
-            const weekStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
-            const weekEnd = format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
-    
-            const { data: completedData, error: completedError } = await supabase
-              .from('exercise_scores')
-              .select('exercise_id, created_at')
-              .eq('user_id', user.id)
-              .gte('created_at', weekStart)
-              .lte('created_at', weekEnd);
-    
-            if (completedError) throw completedError;
-            // Pass the updated completed exercises to the WeeklyExercises component
-            onClose(completedData || []);
-          } else {
-            onClose();
-          }
-    
-          alert('Workout logged successfully!');
-        } catch (error) {
-          console.error('Error logging workout:', error);
-          alert(`Failed to log workout: ${error.message || 'Unknown error'}`);
-        }
-      };
+const handleSubmit = async () => {
+  if (!user) {
+    alert('User is not logged in.');
+    return;
+  }
+
+  try {
+    // First create the workout log
+    const { data: workoutLog, error: workoutError } = await supabase
+      .from('workout_logs')
+      .insert({
+        user_id: user.id,
+        workout_id: workout.id,
+        notes,
+        completed_at: new Date().toISOString(), // Add this line
+        score: logs.reduce((total, log, index) => {
+          const exercise = workout.workout_exercises?.[index];
+          return total + (exercise ? calculateScore(exercise, log, workout.type) : 0);
+        }, 0),
+        total: logs.reduce((total, log, index) => {
+          const exercise = workout.workout_exercises?.[index];
+          return total + (exercise ? calculateTotal(exercise, log) : 0);
+        }, 0),
+      })
+      .select()
+      .single();
+
+    if (workoutError) throw workoutError;
+
+    // Save exercise scores
+    const exerciseScores = logs.flatMap((log, index) => {
+      const exercise = workout.workout_exercises?.[index];
+      if (!exercise) return [];
+
+      return log.sets.map((set) => ({
+        user_id: user.id,
+        workout_log_id: workoutLog.id,
+        exercise_id: log.exercise_id,
+        weight: set.weight,
+        reps: set.reps,
+        distance: set.distance,
+        time: set.time,
+        calories: set.calories,
+      }));
+    });
+
+    const { error: scoresError } = await supabase
+      .from('exercise_scores')
+      .insert(exerciseScores);
+
+    if (scoresError) throw scoresError;
+
+    // Get completed exercises for the week in the format WeeklyExercises expects
+    if (user) {
+      const weekStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
+      const weekEnd = format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
+
+      const { data: completedData, error: completedError } = await supabase
+        .from('workout_logs')
+        .select(`
+          completed_at,
+          workout:workouts!inner (
+            workout_exercises!inner (
+              exercise_id
+            )
+          )
+        `)
+        .eq('user_id', user.id)
+        .gte('completed_at', weekStart)
+        .lte('completed_at', weekEnd);
+
+      if (completedError) throw completedError;
+
+      const formattedCompletedExercises = completedData?.flatMap(log =>
+        log.workout.workout_exercises.map(ex => ({
+          exercise_id: ex.exercise_id,
+          completed_at: log.completed_at,
+        }))
+      ) || [];
+
+      onClose(formattedCompletedExercises);
+    } else {
+      onClose();
+    }
+
+    alert('Workout logged successfully!');
+  } catch (error) {
+    console.error('Error logging workout:', error);
+    alert(`Failed to log workout: ${error.message || 'Unknown error'}`);
+  }
+};
     
       const formatTime = (minutes: number | undefined): string => {
         if (minutes === undefined) return '00:00';
